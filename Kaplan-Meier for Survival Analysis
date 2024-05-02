@@ -4,25 +4,26 @@ library(survival)
 library(survminer)
 library(prodlim)
 library(pec)
+library(lubridate)
 
 # Create the dataframe with the provided data
 data <- data.frame(
   Case = 1:32,
   Entry_Date = c("2/87", "2/87", "2/87", "2/87", "3/87", "3/87", "4/87", "4/87", "4/87", "5/87",
-                    "6/87", "6/87", "6/87", "7/87", "8/87", "9/87", "9/87", "10/87", "12/87", "12/87",
-                    "1/88", "2/88", "2/88", "3/88", "5/88", "5/88", "5/88", "6/88", "7/88", "7/88",
-                    "7/88", "9/88"),
+                 "6/87", "6/87", "6/87", "7/87", "8/87", "9/87", "9/87", "10/87", "12/87", "12/87",
+                 "1/88", "2/88", "2/88", "3/88", "5/88", "5/88", "5/88", "6/88", "7/88", "7/88",
+                 "7/88", "9/88"),
   Last_Observation_Date = c("2/89*", "2/89*", "12/88", "12/87", "6/87", "9/87", "2/89*", "5/87",
-                               "2/89*", "2/89*", "9/87", "8/87", "8/89*", "10/87", "2/89*", "12/88*",
-                               "11/88", "3/88", "8/88", "2/88", "10/88", "2/89*", "1/90*", "12/88", 
-                               "5/89", "4/89*", "11/89", "12/88", "2/90*", "2/90*", "12/89*", "10/89"),
+                            "2/89*", "2/89*", "9/87", "8/87", "8/89*", "10/87", "2/89*", "12/88*",
+                            "11/88", "3/88", "8/88", "2/88", "10/88", "2/89*", "1/90*", "12/88", 
+                            "5/89*", "4/89*", "11/89", "12/88", "2/90*", "2/90*", "12/89*", "10/89*"),
   Treatment = c("Placebo", "AZT", "AZT", "AZT", "Placebo", "Placebo", "AZT", "Placebo", "Placebo",
-                  "AZT", "AZT", "Placebo", "AZT", "Placebo", "AZT", "Placebo", "Placebo", "AZT", 
-                  "Placebo", "Placebo", "Placebo", "AZT", "AZT", "Placebo", "Placebo", "AZT", 
-                  "Placebo", "Placebo", "AZT", "AZT", "AZT", "AZT")
+                "AZT", "AZT", "Placebo", "AZT", "Placebo", "AZT", "Placebo", "Placebo", "AZT", 
+                "Placebo", "Placebo", "Placebo", "AZT", "AZT", "Placebo", "Placebo", "AZT", 
+                "Placebo", "Placebo", "AZT", "AZT", "AZT", "AZT")
 )
 
-#A#
+#A________________________________# Participation time and status for each patient
 
 # Identify censored observations
 data$Status <- ifelse(grepl("\\*$", data$Last_Observation_Date), "Censored", "Complete")
@@ -31,50 +32,76 @@ data$Status <- ifelse(grepl("\\*$", data$Last_Observation_Date), "Censored", "Co
 data$Entry_Date <- as.Date(paste0("01/", data$Entry_Date), format = "%d/%m/%y")
 data$Last_Observation_Date <- as.Date(paste0("01/", data$Last_Observation_Date), format = "%d/%m/%y")
 
-# Calculate participation time in months for each patient
+# Calculate the participation time in months for each patient
 data$Participation_Time_Months <- round(as.numeric(difftime(data$Last_Observation_Date, data$Entry_Date, units = "days")) / 30)
 
-# Show participation time and status (complete/censored) for each patient
+# Display the participation time and status (complete/censored) for each patient
 participation_time <- data.frame(
   Case = data$Case,
   Participation_Time_Months = data$Participation_Time_Months, 
   Status = data$Status
 )
 
-head(participation_time)
+participation_time
 
-#B#
+table(data$Status)
 
-# Create a new column 'Participation_Time_Semesters' representing the number of semesters
-data$Participation_Time_Semesters <- cut(data$Participation_Time_Months, breaks = c(0, 6, 12, 18, 24, 30, max(data$Participation_Time_Months)), labels = FALSE)
+#B________________________________# Life Table (Semesters)
 
-head(data)
+# Calculate the participation time in semesters for each patient
+# Round up because a semester is a closed interval of time
+data$Participation_Time_Semesters <- ceiling(data$Participation_Time_Months / 6)
 
-data$Status_Num <- ifelse(data$Status == 'Complete', 1, 0)
+# Display the participation time in semesters for each patient
+participation_time_semesters <- data.frame(
+  Case = data$Case,
+  Participation_Time_Semesters = data$Participation_Time_Semesters,
+  Status = data$Status
+)
 
-lifetable <- survfit(Surv(Participation_Time_Semesters, Status_Num) ~ 1, data)
-lifetable
-summary(lifetable)
+participation_time_semesters
 
-#C#
+data$Status_num <- ifelse(data$Status == 'Complete', 1, 0)
 
-# Fit the Kaplan-Meier model
-fit <- survfit(Surv(Participation_Time_Semesters, Status_Num) ~ Treatment, data = data)
+library(gt)
 
-print(fit)
+# Update this data
+life_table <- data.frame(
+  Semester = c(1, 2, 3, 4, 5),
+  Deceased = c(9, 5, 3, 1, 0),
+  Censorship = c(0, 2, 3, 8, 1),
+  Risk = c(32, 23, 16, 10, 0)  
+)
 
-# Summary of survival curves
-summary(fit)
-# Access to the sort summary table
-summary(fit)$table
+# Create the table with gt without using tab_spanner
+gt_table <- gt(life_table)
 
-#D#
-# Plot
-ggsurvplot(fit,
-           pval = TRUE, conf.int = TRUE,
-           risk.table = TRUE,
-           risk.table.col = "strata",
-           linetype = "strata",
-           surv.median.line = "hv",
-           ggtheme = theme_bw(),
-           palette = c("#E7B800", "#2E9FDF"))
+gt_table
+
+
+
+#C________________________________# Fit the Kaplan-Meier model
+km_fit <- survfit(Surv(Participation_Time_Months, Status_num) ~ 1, data = data)
+
+# Summarize the Kaplan-Meier fit results
+km_fit
+summary(km_fit)
+
+plot(km_fit)
+
+#D________________________________# Fit the Kaplan-Meier model by treatment group
+km_fit2 <- survfit(Surv(Participation_Time_Months, Status_num) ~ Treatment, data = data)
+km_fit2
+summary(km_fit2)
+
+# Create a plot of the survival curves by treatment group
+ggsurvplot(
+  km_fit2,
+  data = data,
+  pval = TRUE,
+  conf.int = TRUE,
+  palette = c("#E7B800", "#2E9FDF"),
+  xlab = "Time (semesters)",
+  ylab = "Probability of Survival",
+  title = "Survival Curves by Treatment"
+)
